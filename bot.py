@@ -75,32 +75,32 @@ Happy Farming 🌾😊"""
 # ==================================================
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # ❗ FIX: avoid root read (caused Firebase fetch failures)
-        moisture = db.reference("/soil_moisture").get()
-        motor = db.reference("/motor").get()
+        ref = db.reference("/")
 
-        # keep your style intact
-        data = {
-            "soil_moisture": moisture,
-            "motor": motor
-        }
+        data = ref.get()
+
+        print("RAW FIREBASE DATA:", data)  # 👈 IMPORTANT DEBUG
+
+        if not data:
+            raise Exception("No data received from Firebase")
 
         moisture = data.get("soil_moisture", "No data")
         motor = data.get("motor", "Unknown")
+        mode = data.get("mode", "Unknown")
 
         await update.message.reply_text(
             f"""📊 Live Status
 
 🌱 Soil Moisture: {moisture}
 💧 Motor Status: {motor}
+⚙️ Mode: {mode}
 
-System working perfectly ✅"""
+System OK ✅"""
         )
 
     except Exception as e:
-        logging.error(e)
-        await update.message.reply_text("⚠️ Failed to fetch Firebase data")
-
+        logging.exception(e)
+        await update.message.reply_text(f"⚠️ REAL ERROR: {str(e)}")
 
 # ==================================================
 # MOTOR ON (UNCHANGED LOGIC, SAFE UPDATE)
