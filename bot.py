@@ -12,26 +12,14 @@ from firebase_admin import credentials, db
 # ==================================================
 # LOGGING
 # ==================================================
-
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
 # ==================================================
-# FIREBASE SETUP
-# ==================================================
-
-cred = credentials.Certificate("serviceAccountKey.json")
-
-firebase_admin.initialize_app(cred, {
-    "databaseURL": "https://smart-irrigation-9f1bd-default-rtdb.asia-southeast1.firebasedatabase.app/"
-})
-
-# ==================================================
 # ENV VARIABLES
 # ==================================================
-
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 PORT = int(os.environ.get("PORT", 10000))
@@ -43,21 +31,27 @@ if not WEBHOOK_URL:
     raise Exception("WEBHOOK_URL not found in environment variables")
 
 # ==================================================
+# FIREBASE SETUP
+# ==================================================
+cred = credentials.Certificate("serviceAccountKey.json")
+
+firebase_admin.initialize_app(cred, {
+    "databaseURL": "https://smart-irrigation-9f1bd-default-rtdb.asia-southeast1.firebasedatabase.app/"
+})
+
+# ==================================================
 # FLASK APP
 # ==================================================
-
 flask_app = Flask(__name__)
 
 # ==================================================
-# TELEGRAM APP
+# TELEGRAM BOT
 # ==================================================
-
 tg_app = ApplicationBuilder().token(TOKEN).build()
 
 # ==================================================
 # COMMANDS
 # ==================================================
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         """🌱🤖 Smart Irrigation Bot Activated!
@@ -67,39 +61,54 @@ Use:
 👉 /motor_on
 👉 /motor_off
 
-Happy Farming 🌾"""
+Happy Farming 🌾😊"""
     )
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ref = db.reference("/")
-    data = ref.get() or {}
+    try:
+        data = db.reference("/").get() or {}
 
-    moisture = data.get("soil_moisture", "No data")
-    motor = data.get("motor", "Unknown")
+        moisture = data.get("soil_moisture", "No data")
+        motor = data.get("motor", "Unknown")
 
-    await update.message.reply_text(
-        f"""📊 Live Status
+        await update.message.reply_text(
+            f"""📊 Live Status
 
 🌱 Soil Moisture: {moisture}
-💧 Motor: {motor}"""
-    )
+💧 Motor: {motor}
+
+System working perfectly ✅"""
+        )
+
+    except Exception as e:
+        await update.message.reply_text("⚠️ Unable to fetch Firebase data")
+        logging.error(e)
 
 
 async def motor_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    db.reference("/").update({"motor": "ON"})
-    await update.message.reply_text("💧 Motor ON")
+    try:
+        db.reference("/").update({"motor": "ON"})
+        await update.message.reply_text("💧 Motor turned ON")
+
+    except Exception as e:
+        await update.message.reply_text("⚠️ Failed to turn ON motor")
+        logging.error(e)
 
 
 async def motor_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    db.reference("/").update({"motor": "OFF"})
-    await update.message.reply_text("🛑 Motor OFF")
+    try:
+        db.reference("/").update({"motor": "OFF"})
+        await update.message.reply_text("🛑 Motor turned OFF")
+
+    except Exception as e:
+        await update.message.reply_text("⚠️ Failed to turn OFF motor")
+        logging.error(e)
 
 
 # ==================================================
-# REGISTER HANDLERS
+# REGISTER COMMANDS
 # ==================================================
-
 tg_app.add_handler(CommandHandler("start", start))
 tg_app.add_handler(CommandHandler("status", status))
 tg_app.add_handler(CommandHandler("motor_on", motor_on))
@@ -108,29 +117,37 @@ tg_app.add_handler(CommandHandler("motor_off", motor_off))
 # ==================================================
 # FLASK ROUTES
 # ==================================================
-
 @flask_app.route("/")
 def home():
     return "Smart Irrigation Bot Running ✅"
 
 
-@flask_app.route(f"/{TOKEN}", methods=["POST"])
+@flask_app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), tg_app.bot)
-    asyncio.run(tg_app.process_update(update))
-    return "ok"
+    try:
+        update = Update.de_json(request.get_json(force=True), tg_app.bot)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(tg_app.process_update(update))
+        loop.close()
+
+        return "ok"
+
+    except Exception as e:
+        logging.error(e)
+        return "error"
 
 
 # ==================================================
 # STARTUP
 # ==================================================
-
 async def startup():
     await tg_app.initialize()
     await tg_app.start()
 
     await tg_app.bot.set_webhook(
-        url=f"{WEBHOOK_URL}/{TOKEN}"
+        url=f"{WEBHOOK_URL}/webhook"
     )
 
     print("✅ Webhook connected")
@@ -139,10 +156,12 @@ async def startup():
 # ==================================================
 # MAIN
 # ==================================================
-
 if __name__ == "__main__":
-    asyncio.run(startup())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
-    print("🚀 Smart Irrigation Bot Running")
+    loop.run_until_complete(startup())
 
-    flask_app.run(host="0.0.0.0", port=PORT)
+    print("🚀 Smart Irrigation Bot Running on Render")
+
+    flask_app.run(host="0.0.0.0", port=PORT, debug=False)
