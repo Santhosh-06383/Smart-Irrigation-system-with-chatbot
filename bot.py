@@ -1,86 +1,91 @@
 import os
 import logging
 from flask import Flask, request
-
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# ---------------- LOGGING ----------------
+import firebase_admin
+from firebase_admin import credentials, db
+
+# ------------------ LOGGING ------------------
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
-# ---------------- TOKEN (USE ENV ON RENDER) ----------------
-TOKEN = os.getenv("8158459010:AAF2C_EzPT1hcqLksuiynCY0Ur3ndK9KayI")
+# ------------------ FIREBASE SETUP ------------------
+cred = credentials.Certificate("serviceAccountKey.json")
 
-# Render URL example:
-# https://your-service.onrender.com/webhook
-WEBHOOK_URL = os.getenv("https://Smart-Irrigation-system-with-chatbot.onrender.com/webhook")
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://smart-irrigation-9f1bd-default-rtdb.asia-southeast1.firebasedatabase.app/'
+})
 
-# ---------------- TELEGRAM HANDLERS ----------------
+# ------------------ TELEGRAM TOKEN ------------------
+TOKEN = os.environ.get("8158459010:AAF2C_EzPT1hcqLksuiynCY0Ur3ndK9KayI")
 
+if not TOKEN:
+    raise Exception("TOKEN not found in environment variables")
+
+# ------------------ FLASK APP ------------------
+flask_app = Flask(__name__)
+
+# ------------------ TELEGRAM APP ------------------
+tg_app = ApplicationBuilder().token(TOKEN).build()
+
+# ------------------ COMMANDS ------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🌱🤖 *(Anto, Santo, Veera)'s Smart Irrigation Bot Activated!* 💧\n\n"
-        "Welcome! Your irrigation system is now connected.\n\n"
-        "Use:\n"
-        "👉 /status - Check soil & pump status\n\n"
-        "Happy Farming 🌾😊",
-        parse_mode="Markdown"
+        "🌱🤖 Smart Irrigation Bot Activated!\n\n"
+        "Use /status /motor_on /motor_off 🌾"
     )
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    moisture = "50%"   # later replace with Firebase
-    pump = "OFF"
+    ref = db.reference('/')
+    data = ref.get() or {}
+
+    moisture = data.get("soil_moisture", "No data")
+    motor = data.get("motor", "Unknown")
 
     await update.message.reply_text(
-        f"📊 *Live Status*\n\n"
+        f"📊 Live Status\n\n"
         f"🌱 Soil Moisture: {moisture}\n"
-        f"🚿 Pump Status: {pump}\n\n"
-        f"System working perfectly ✅",
-        parse_mode="Markdown"
+        f"💧 Motor: {motor}"
     )
 
-# ---------------- TELEGRAM APP ----------------
-tg_app = ApplicationBuilder().token(TOKEN).build()
+async def motor_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db.reference('/').update({"motor": "ON"})
+    await update.message.reply_text("💧 Motor ON")
 
+async def motor_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db.reference('/').update({"motor": "OFF"})
+    await update.message.reply_text("🛑 Motor OFF")
+
+# ------------------ REGISTER HANDLERS ------------------
 tg_app.add_handler(CommandHandler("start", start))
 tg_app.add_handler(CommandHandler("status", status))
+tg_app.add_handler(CommandHandler("motor_on", motor_on))
+tg_app.add_handler(CommandHandler("motor_off", motor_off))
 
-# ---------------- FLASK APP ----------------
-flask_app = Flask(__name__)
+# ------------------ WEBHOOK ROUTE ------------------
+@flask_app.route(f"/{TOKEN}", methods=["POST"])
+async def webhook():
+    update = Update.de_json(request.get_json(force=True), tg_app.bot)
+    await tg_app.process_update(update)
+    return "ok"
 
-@flask_app.route("/")
-def home():
-    return "🌱 Smart Irrigation Bot Running"
+# ------------------ SET WEBHOOK ON START ------------------
+@app.post_init
+async def on_startup(application):
+    webhook_url = os.environ.get("https://Smart-Irrigation-system-with-chatbot.onrender.com")
 
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, tg_app.bot)
-    tg_app.update_queue.put_nowait(update)
-    return "OK"
+    if not webhook_url:
+        raise Exception("WEBHOOK_URL not set")
 
-# ---------------- SET WEBHOOK ----------------
-async def set_webhook():
-    await tg_app.bot.set_webhook(WEBHOOK_URL)
-    logging.info(f"Webhook set to: {WEBHOOK_URL}")
+    await application.bot.set_webhook(
+        url=f"{webhook_url}/{TOKEN}"
+    )
 
-# ---------------- MAIN ----------------
+# ------------------ RUN FLASK ------------------
 if __name__ == "__main__":
-    import asyncio
-
-    async def main():
-        await set_webhook()
-
-        tg_app.initialize()
-        tg_app.start()
-
-        port = int(os.environ.get("PORT", 10000))
-        flask_app.run(host="0.0.0.0", port=port)
-
-    asyncio.run(main())
-
-if __name__ == "__main__":
-    main()
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port)
