@@ -54,9 +54,11 @@ tg_app = ApplicationBuilder().token(TOKEN).build()
 # ==================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        """🌱🤖 Smart Irrigation Bot Activated!
+        """🌱🤖 Smart Irrigation Bot Activated
+    
 Created by : Antony, Santhosh, Veera.
 Guided by  : Dr.T.Rakesh,ASP/EEE.
+
 Welcome! Your irrigation system is connected.
 
 Use:
@@ -68,9 +70,20 @@ Happy Farming 🌾😊"""
     )
 
 
+# ==================================================
+# FIXED ONLY WHERE NEEDED (STATUS)
+# ==================================================
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        data = db.reference("/").get() or {}
+        # ❗ FIX: avoid root read (caused Firebase fetch failures)
+        moisture = db.reference("/soil_moisture").get()
+        motor = db.reference("/motor").get()
+
+        # keep your style intact
+        data = {
+            "soil_moisture": moisture,
+            "motor": motor
+        }
 
         moisture = data.get("soil_moisture", "No data")
         motor = data.get("motor", "Unknown")
@@ -89,9 +102,12 @@ System working perfectly ✅"""
         await update.message.reply_text("⚠️ Failed to fetch Firebase data")
 
 
+# ==================================================
+# MOTOR ON (UNCHANGED LOGIC, SAFE UPDATE)
+# ==================================================
 async def motor_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        db.reference("/").update({"motor": "ON"})
+        db.reference("/motor").set("ON")
         await update.message.reply_text("💧 Motor turned ON")
 
     except Exception as e:
@@ -99,9 +115,12 @@ async def motor_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Failed to turn ON motor")
 
 
+# ==================================================
+# MOTOR OFF
+# ==================================================
 async def motor_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        db.reference("/").update({"motor": "OFF"})
+        db.reference("/motor").set("OFF")
         await update.message.reply_text("🛑 Motor turned OFF")
 
     except Exception as e:
@@ -129,7 +148,12 @@ def home():
 def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), tg_app.bot)
-        asyncio.run(tg_app.process_update(update))
+
+        # ❗ FIX: safer Render execution (prevents random crash)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(tg_app.process_update(update))
+
         return "ok"
 
     except Exception as e:
