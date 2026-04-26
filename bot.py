@@ -25,10 +25,10 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 PORT = int(os.environ.get("PORT", 10000))
 
 if not TOKEN:
-    raise Exception("TELEGRAM_TOKEN not found in environment variables")
+    raise Exception("TELEGRAM_TOKEN not found")
 
 if not WEBHOOK_URL:
-    raise Exception("WEBHOOK_URL not found in environment variables")
+    raise Exception("WEBHOOK_URL not found")
 
 # ==================================================
 # FIREBASE SETUP
@@ -55,6 +55,9 @@ tg_app = ApplicationBuilder().token(TOKEN).build()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         """🌱🤖 Smart Irrigation Bot Activated!
+Created by : Antony, Santhosh, Veera.
+Guided by  : Dr.T.Rakesh,ASP/EEE.
+Welcome! Your irrigation system is connected.
 
 Use:
 👉 /status
@@ -76,14 +79,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"""📊 Live Status
 
 🌱 Soil Moisture: {moisture}
-💧 Motor: {motor}
+💧 Motor Status: {motor}
 
 System working perfectly ✅"""
         )
 
     except Exception as e:
-        await update.message.reply_text("⚠️ Unable to fetch Firebase data")
         logging.error(e)
+        await update.message.reply_text("⚠️ Failed to fetch Firebase data")
 
 
 async def motor_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -92,8 +95,8 @@ async def motor_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("💧 Motor turned ON")
 
     except Exception as e:
-        await update.message.reply_text("⚠️ Failed to turn ON motor")
         logging.error(e)
+        await update.message.reply_text("⚠️ Failed to turn ON motor")
 
 
 async def motor_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,12 +105,12 @@ async def motor_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🛑 Motor turned OFF")
 
     except Exception as e:
-        await update.message.reply_text("⚠️ Failed to turn OFF motor")
         logging.error(e)
+        await update.message.reply_text("⚠️ Failed to turn OFF motor")
 
 
 # ==================================================
-# REGISTER COMMANDS
+# REGISTER HANDLERS
 # ==================================================
 tg_app.add_handler(CommandHandler("start", start))
 tg_app.add_handler(CommandHandler("status", status))
@@ -115,7 +118,7 @@ tg_app.add_handler(CommandHandler("motor_on", motor_on))
 tg_app.add_handler(CommandHandler("motor_off", motor_off))
 
 # ==================================================
-# FLASK ROUTES
+# ROUTES
 # ==================================================
 @flask_app.route("/")
 def home():
@@ -126,21 +129,16 @@ def home():
 def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), tg_app.bot)
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(tg_app.process_update(update))
-        loop.close()
-
+        asyncio.run(tg_app.process_update(update))
         return "ok"
 
     except Exception as e:
         logging.error(e)
-        return "error"
+        return "error", 500
 
 
 # ==================================================
-# STARTUP
+# START TELEGRAM + WEBHOOK
 # ==================================================
 async def startup():
     await tg_app.initialize()
@@ -150,18 +148,13 @@ async def startup():
         url=f"{WEBHOOK_URL}/webhook"
     )
 
-    print("✅ Webhook connected")
+    print("✅ Webhook Connected")
+    print("🚀 Smart Irrigation Bot Running")
 
 
 # ==================================================
 # MAIN
 # ==================================================
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    loop.run_until_complete(startup())
-
-    print("🚀 Smart Irrigation Bot Running on Render")
-
-    flask_app.run(host="0.0.0.0", port=PORT, debug=False)
+    asyncio.run(startup())
+    flask_app.run(host="0.0.0.0", port=PORT)
