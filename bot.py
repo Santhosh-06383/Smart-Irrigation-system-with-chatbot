@@ -156,5 +156,10 @@ async def startup():
 # MAIN
 # ==================================================
 if __name__ == "__main__":
-    asyncio.run(startup())
-    flask_app.run(host="0.0.0.0", port=PORT)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(startup())
+
+    print("🚀 Smart Irrigation Bot Running on Render")
+
+    flask_app.run(host="0.0.0.0", port=PORT, debug=False)
