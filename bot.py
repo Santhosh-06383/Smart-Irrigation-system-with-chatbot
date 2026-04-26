@@ -21,7 +21,7 @@ firebase_admin.initialize_app(cred, {
 })
 
 # ------------------ TELEGRAM TOKEN ------------------
-TOKEN = os.environ.get("8158459010:AAF2C_EzPT1hcqLksuiynCY0Ur3ndK9KayI")
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 if not TOKEN:
     raise Exception("TOKEN not found in environment variables")
@@ -76,7 +76,7 @@ async def webhook():
 # ------------------ SET WEBHOOK ON START ------------------
 @app.post_init
 async def on_startup(application):
-    webhook_url = os.environ.get("https://Smart-Irrigation-system-with-chatbot.onrender.com")
+    webhook_url = os.environ.get("WEB")
 
     if not webhook_url:
         raise Exception("WEBHOOK_URL not set")
