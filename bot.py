@@ -1,85 +1,86 @@
+import os
 import logging
+from flask import Flask, request
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-import firebase_admin
-from firebase_admin import credentials, db
-
-# ------------------ FIREBASE SETUP ------------------
-
-cred = credentials.Certificate("serviceAccountKey.json")
-
-firebase_admin.initialize_app(cred, {
-    'databaseURL': 'https://smart-irrigation-9f1bd-default-rtdb.asia-southeast1.firebasedatabase.app/'
-})
-
-# ------------------ TELEGRAM BOT ------------------
-
-TOKEN = "8158459010:AAF2C_EzPT1hcqLksuiynCY0Ur3ndK9KayI"
-
+# ---------------- LOGGING ----------------
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-# ------------------ COMMANDS ------------------
+# ---------------- TOKEN (USE ENV ON RENDER) ----------------
+TOKEN = os.getenv("8158459010:AAF2C_EzPT1hcqLksuiynCY0Ur3ndK9KayI")
+
+# Render URL example:
+# https://your-service.onrender.com/webhook
+WEBHOOK_URL = os.getenv("https://Smart-Irrigation-system-with-chatbot.onrender.com/webhook")
+
+# ---------------- TELEGRAM HANDLERS ----------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        """🌱🤖 (Anto, Santo, Veera)'s Smart Irrigation Bot Activated! 💧
-
-Welcome! Your irrigation system is now connected.
-
-Use:
-👉 /status - Check soil & pump status
-👉 /motor_on - Turn ON motor
-👉 /motor_off - Turn OFF motor
-
-Happy Farming 🌾😊""")
-
-# Read soil moisture
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ref = db.reference('/')
-    data = ref.get()
-
-    moisture = data.get("soil_moisture", "No data")
-    motor = data.get("motor", "Unknown")
-
-    await update.message.reply_text(
-  f"""📊 Live Status
-
-🌱 Soil Moisture: {moisture}
-💧 Motor Status: {motor}
-
-System working perfectly ✅"""
+        "🌱🤖 *(Anto, Santo, Veera)'s Smart Irrigation Bot Activated!* 💧\n\n"
+        "Welcome! Your irrigation system is now connected.\n\n"
+        "Use:\n"
+        "👉 /status - Check soil & pump status\n\n"
+        "Happy Farming 🌾😊",
+        parse_mode="Markdown"
     )
 
-# Turn motor ON
-async def motor_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ref = db.reference('/')
-    ref.update({"motor": "ON"})
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    moisture = "50%"   # later replace with Firebase
+    pump = "OFF"
 
-    await update.message.reply_text("💧 Motor turned ON")
+    await update.message.reply_text(
+        f"📊 *Live Status*\n\n"
+        f"🌱 Soil Moisture: {moisture}\n"
+        f"🚿 Pump Status: {pump}\n\n"
+        f"System working perfectly ✅",
+        parse_mode="Markdown"
+    )
 
-# Turn motor OFF
-async def motor_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ref = db.reference('/')
-    ref.update({"motor": "OFF"})
+# ---------------- TELEGRAM APP ----------------
+tg_app = ApplicationBuilder().token(TOKEN).build()
 
-    await update.message.reply_text("🛑 Motor turned OFF")
+tg_app.add_handler(CommandHandler("start", start))
+tg_app.add_handler(CommandHandler("status", status))
 
-# ------------------ MAIN FUNCTION ------------------
+# ---------------- FLASK APP ----------------
+flask_app = Flask(__name__)
 
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+@flask_app.route("/")
+def home():
+    return "🌱 Smart Irrigation Bot Running"
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("motor_on", motor_on))
-    app.add_handler(CommandHandler("motor_off", motor_off))
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, tg_app.bot)
+    tg_app.update_queue.put_nowait(update)
+    return "OK"
 
-    print("🚀 Bot is running🌳.....")
-    app.run_polling()
+# ---------------- SET WEBHOOK ----------------
+async def set_webhook():
+    await tg_app.bot.set_webhook(WEBHOOK_URL)
+    logging.info(f"Webhook set to: {WEBHOOK_URL}")
+
+# ---------------- MAIN ----------------
+if __name__ == "__main__":
+    import asyncio
+
+    async def main():
+        await set_webhook()
+
+        tg_app.initialize()
+        tg_app.start()
+
+        port = int(os.environ.get("PORT", 10000))
+        flask_app.run(host="0.0.0.0", port=port)
+
+    asyncio.run(main())
 
 if __name__ == "__main__":
     main()
