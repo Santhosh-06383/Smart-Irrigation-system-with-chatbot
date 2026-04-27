@@ -33,7 +33,11 @@ if not WEBHOOK_URL:
 # ==================================================
 # FIREBASE SETUP
 # ==================================================
-cred = credentials.Certificate("serviceAccountKey.json")
+import json
+
+firebase_json = json.loads(os.environ["FIREBASE_CREDENTIALS"])
+
+cred = credentials.Certificate(firebase_json)
 
 firebase_admin.initialize_app(cred, {
     "databaseURL": "https://smart-irrigation-9f1bd-default-rtdb.asia-southeast1.firebasedatabase.app/"
