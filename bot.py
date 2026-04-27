@@ -69,9 +69,8 @@ Use:
 Happy Farming 🌾😊"""
     )
 
-
 # ==================================================
-# FIXED ONLY WHERE NEEDED (STATUS)
+# STATUS (IMPROVED DEBUG SAFE)
 # ==================================================
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -79,7 +78,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         data = ref.get()
 
-        print("RAW FIREBASE DATA:", data)  # 👈 IMPORTANT DEBUG
+        print("RAW FIREBASE DATA:", data)
 
         if not data:
             raise Exception("No data received from Firebase")
@@ -103,30 +102,28 @@ System OK ✅"""
         await update.message.reply_text(f"⚠️ REAL ERROR: {str(e)}")
 
 # ==================================================
-# MOTOR ON (UNCHANGED LOGIC, SAFE UPDATE)
+# MOTOR ON (FIXED)
 # ==================================================
 async def motor_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        db.reference("/motor").set("ON")
+        db.reference("/").update({"motor": "ON"})
         await update.message.reply_text("💧 Motor turned ON")
 
     except Exception as e:
         logging.error(e)
         await update.message.reply_text("⚠️ Failed to turn ON motor")
 
-
 # ==================================================
-# MOTOR OFF
+# MOTOR OFF (FIXED)
 # ==================================================
 async def motor_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        db.reference("/motor").set("OFF")
+        db.reference("/").update({"motor": "OFF"})
         await update.message.reply_text("🛑 Motor turned OFF")
 
     except Exception as e:
         logging.error(e)
         await update.message.reply_text("⚠️ Failed to turn OFF motor")
-
 
 # ==================================================
 # REGISTER HANDLERS
@@ -149,7 +146,6 @@ def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), tg_app.bot)
 
-        # ❗ FIX: safer Render execution (prevents random crash)
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(tg_app.process_update(update))
@@ -159,7 +155,6 @@ def webhook():
     except Exception as e:
         logging.error(e)
         return "error", 500
-
 
 # ==================================================
 # START TELEGRAM + WEBHOOK
@@ -174,7 +169,6 @@ async def startup():
 
     print("✅ Webhook Connected")
     print("🚀 Smart Irrigation Bot Running")
-
 
 # ==================================================
 # MAIN
